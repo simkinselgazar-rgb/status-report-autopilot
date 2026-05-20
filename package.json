@@ -1,6 +1,6 @@
 {
   "name": "status-report-autopilot",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Self-hosted weekly client-report tool for digital agencies. Reads Asana / Linear / Slack / Zoom / Microsoft Teams, drafts a client-facing narrative in the agency's voice, and ships it as an email, a PDF, and a public read-only link.",
   "license": "Apache-2.0",
   "author": "Simkins & Elgazar AI Practice (ai.simkinselgazar.com)",

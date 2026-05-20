@@ -52,20 +52,27 @@ import {
 // --- The test fixture --------------------------------------------------------
 
 /**
- * The target IDs discovered during the per-connector smoke tests. Edit if you
- * run this script against a different workspace.
+ * The target IDs are read from env so this script is workspace-agnostic.
+ * Discover each id by running `scripts/smoke-connector.ts` for the source
+ * with `--workspace=<id>`, copy the printed `--project=<id>` value into the
+ * matching env var below, then re-run this script. A missing env var skips
+ * that source (the script runs against the remaining sources).
+ *
+ *   SRA_SMOKE_ASANA_PROJECT_GID  Asana project gid (numeric).
+ *   SRA_SMOKE_LINEAR_PROJECT_ID  Linear project id (uuid).
+ *   SRA_SMOKE_SLACK_CHANNEL_ID   Slack channel id (e.g. C0123ABC456).
+ *   SRA_SMOKE_ZOOM_USER_ID       Zoom user id.
+ *   SRA_SMOKE_TEAMS_TARGET       Teams `teamId|channelId` composite.
  */
-const SOURCES = {
-  asana: { projectGid: '1214956390097517' },
-  linear: { projectId: '63ceebce-273e-4c95-9733-0ce751663c58' },
-  slack: { channelId: 'C0B4WAVHLM9' },
-  zoom: { userId: '72RjfNqEQYm6QXi2dnNy5w' },
-  teams: {
-    target: '7204aaa3-7c91-40a5-92ef-05f6338a84b8|19:apOQTbI-TDkDp6dLDd6HJHCjtBz5z0FuHZMCio8xJBk1@thread.tacv2',
-  },
+const TARGETS = {
+  asana: process.env.SRA_SMOKE_ASANA_PROJECT_GID?.trim(),
+  linear: process.env.SRA_SMOKE_LINEAR_PROJECT_ID?.trim(),
+  slack: process.env.SRA_SMOKE_SLACK_CHANNEL_ID?.trim(),
+  zoom: process.env.SRA_SMOKE_ZOOM_USER_ID?.trim(),
+  teams: process.env.SRA_SMOKE_TEAMS_TARGET?.trim(),
 } as const;
 
-const CLIENT = { name: 'Northwind Studio' };
+const CLIENT = { name: process.env.SRA_SMOKE_CLIENT_NAME?.trim() || 'Acme Studio' };
 
 const VOICE: ReportVoice = {
   tone: 'professional',
@@ -74,7 +81,7 @@ const VOICE: ReportVoice = {
   voiceSample: '',
 };
 
-type SourceId = keyof typeof SOURCES;
+type SourceId = keyof typeof TARGETS;
 
 // --- helpers -----------------------------------------------------------------
 
@@ -90,7 +97,7 @@ function parseSources(): SourceId[] {
     if (!value) continue;
     return value.split(',').map((s) => s.trim()) as SourceId[];
   }
-  return Object.keys(SOURCES) as SourceId[];
+  return Object.keys(TARGETS) as SourceId[];
 }
 
 /**
@@ -118,46 +125,67 @@ function modelConfigFromEnv(): ModelConfig {
   fail('No model env config found. Set LOCAL_MODEL_URL (+ LOCAL_MODEL_NAME) or another supported provider key.');
 }
 
-function buildConnector(source: SourceId): Connector | null {
+interface BuildResult {
+  connector: Connector | null;
+  /** Reason the connector wasn't built, when `connector` is `null`. */
+  reason?: string;
+}
+
+function buildConnector(source: SourceId): BuildResult {
+  const target = TARGETS[source];
   switch (source) {
     case 'asana': {
       const token = process.env.ASANA_TOKEN?.trim();
-      if (!token) return null;
-      return createAsanaConnector({ accessToken: token, projectGids: [SOURCES.asana.projectGid] });
+      if (!token) return { connector: null, reason: 'ASANA_TOKEN unset' };
+      if (!target) return { connector: null, reason: 'SRA_SMOKE_ASANA_PROJECT_GID unset' };
+      return {
+        connector: createAsanaConnector({ accessToken: token, projectGids: [target] }),
+      };
     }
     case 'linear': {
       const token = process.env.LINEAR_TOKEN?.trim();
-      if (!token) return null;
-      return createLinearConnector({ accessToken: token, projectIds: [SOURCES.linear.projectId] });
+      if (!token) return { connector: null, reason: 'LINEAR_TOKEN unset' };
+      if (!target) return { connector: null, reason: 'SRA_SMOKE_LINEAR_PROJECT_ID unset' };
+      return {
+        connector: createLinearConnector({ accessToken: token, projectIds: [target] }),
+      };
     }
     case 'slack': {
       const token = process.env.SLACK_TOKEN?.trim();
-      if (!token) return null;
-      return createSlackConnector({ accessToken: token, channelIds: [SOURCES.slack.channelId] });
+      if (!token) return { connector: null, reason: 'SLACK_TOKEN unset' };
+      if (!target) return { connector: null, reason: 'SRA_SMOKE_SLACK_CHANNEL_ID unset' };
+      return {
+        connector: createSlackConnector({ accessToken: token, channelIds: [target] }),
+      };
     }
     case 'zoom': {
       const accountId = process.env.ZOOM_ACCOUNT_ID?.trim();
       const clientId = process.env.ZOOM_CLIENT_ID?.trim();
       const clientSecret = process.env.ZOOM_CLIENT_SECRET?.trim();
-      if (!accountId || !clientId || !clientSecret) return null;
-      return createZoomConnector({
-        accountId,
-        clientId,
-        clientSecret,
-        userIds: [SOURCES.zoom.userId],
-      });
+      if (!accountId || !clientId || !clientSecret) {
+        return { connector: null, reason: 'ZOOM_ACCOUNT_ID / ZOOM_CLIENT_ID / ZOOM_CLIENT_SECRET unset' };
+      }
+      if (!target) return { connector: null, reason: 'SRA_SMOKE_ZOOM_USER_ID unset' };
+      return {
+        connector: createZoomConnector({ accountId, clientId, clientSecret, userIds: [target] }),
+      };
     }
     case 'teams': {
       const tenantId = process.env.TEAMS_TENANT_ID?.trim();
       const clientId = process.env.TEAMS_CLIENT_ID?.trim();
       const clientSecret = process.env.TEAMS_CLIENT_SECRET?.trim();
-      if (!tenantId || !clientId || !clientSecret) return null;
-      return createTeamsConnector({
-        tenantId,
-        clientId,
-        clientSecret,
-        targets: [splitTeamsTarget(SOURCES.teams.target)],
-      });
+      if (!tenantId || !clientId || !clientSecret) {
+        return { connector: null, reason: 'TEAMS_TENANT_ID / TEAMS_CLIENT_ID / TEAMS_CLIENT_SECRET unset' };
+      }
+      if (!target) return { connector: null, reason: 'SRA_SMOKE_TEAMS_TARGET unset' };
+      return {
+        connector: createTeamsConnector({
+          tenantId,
+          clientId,
+          clientSecret,
+          targets: [splitTeamsTarget(target)],
+        }),
+      };
     }
   }
 }
@@ -216,14 +244,14 @@ async function main(): Promise<void> {
   const digestStart = Date.now();
   const results = await Promise.all(
     sources.map(async (source) => {
-      const connector = buildConnector(source);
-      if (!connector) {
-        console.log(`  ${source.padEnd(7)} skipped (no credentials in .env)`);
+      const built = buildConnector(source);
+      if (!built.connector) {
+        console.log(`  ${source.padEnd(7)} skipped (${built.reason})`);
         return null;
       }
       const start = Date.now();
       try {
-        const digest = await connector.fetchActivity(period);
+        const digest = await built.connector.fetchActivity(period);
         logDigest(source, digest, Date.now() - start);
         return digest;
       } catch (error) {
