@@ -1,0 +1,1 @@
+ALTER TABLE "clients" ALTER COLUMN "agency_id" SET NOT NULL;

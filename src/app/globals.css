@@ -1,0 +1,169 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Typefaces */
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: var(--font-literata), ui-serif, Georgia, 'Times New Roman', serif;
+
+  /* Paper & ink, warm, editorial light palette */
+  --color-paper: oklch(0.991 0.004 95);
+  --color-surface: oklch(0.999 0.003 95);
+  --color-sunk: oklch(0.966 0.006 92);
+  --color-ink: oklch(0.26 0.014 72);
+  --color-ink-hover: oklch(0.33 0.015 72);
+  --color-ink-soft: oklch(0.502 0.012 74);
+  --color-ink-faint: oklch(0.688 0.010 80);
+  --color-line: oklch(0.901 0.006 88);
+  --color-line-strong: oklch(0.836 0.009 84);
+
+  /* Pine, connected, settled, done */
+  --color-pine: oklch(0.505 0.072 158);
+  --color-pine-soft: oklch(0.957 0.020 158);
+  --color-pine-ink: oklch(0.398 0.060 158);
+
+  /* Ochre, warmth, the magic moment, focus */
+  --color-ochre: oklch(0.702 0.110 70);
+  --color-ochre-soft: oklch(0.963 0.028 78);
+  --color-ochre-ink: oklch(0.47 0.09 64);
+  --color-focus: oklch(0.582 0.105 66);
+
+  /* Danger, error text */
+  --color-danger: oklch(0.52 0.13 30);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+:root {
+  --shadow-raised:
+    0 1px 2px oklch(0.26 0.014 72 / 0.05),
+    0 6px 16px -8px oklch(0.26 0.014 72 / 0.09);
+  --shadow-lifted:
+    0 2px 5px oklch(0.26 0.014 72 / 0.06),
+    0 18px 40px -14px oklch(0.26 0.014 72 / 0.16);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv05', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Motion ──────────────────────────────────────────────── */
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Step entrance, keyed per step so it replays on advance */
+.anim-step {
+  animation: rise-in 400ms var(--ease-out) both;
+}
+
+/* Staggered children, set --i on each child in JSX */
+.anim-stagger > * {
+  animation: rise-in 440ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 58ms);
+}
+
+/* The report reveal, gentler, blur-led */
+.anim-settle > * {
+  animation: settle-in 620ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+
+.anim-fade {
+  animation: fade-in 360ms ease both;
+}
+
+/* Dashboard report pane, a light entrance on every switch. Deliberately
+   fast and small: the PM sees it tens of times per review session, so it
+   must not get in the way (per the motion-frequency rule). */
+@keyframes report-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.anim-report {
+  animation: report-in 240ms var(--ease-out) both;
+}
+
+/* The quiet win, the sent confirmation settles in when a report ships. */
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.anim-confirm {
+  animation: confirm-in 260ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-step,
+  .anim-stagger > *,
+  .anim-settle > *,
+  .anim-fade,
+  .anim-report,
+  .anim-confirm {
+    animation: fade-in 220ms ease both;
+  }
+}
