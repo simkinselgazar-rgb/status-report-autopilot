@@ -100,7 +100,7 @@ describe('SlackConnector.fetchActivity', () => {
   it('throws config when the window is inverted', async () => {
     const connector = createSlackConnector({
       accessToken: 'xoxb-x',
-      channelId: 'C1',
+      channelIds: ['C1'],
       fetch: queuedFetch(json({ ok: true, messages: [] })),
     });
     await expect(
@@ -111,7 +111,7 @@ describe('SlackConnector.fetchActivity', () => {
   it('normalizes real messages into comment events with resolved actors', async () => {
     const connector = createSlackConnector({
       accessToken: 'xoxb-x',
-      channelId: 'C1',
+      channelIds: ['C1'],
       fetch: queuedFetch(
         json({
           ok: true,

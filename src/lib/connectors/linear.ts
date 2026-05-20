@@ -1,10 +1,10 @@
 /**
  * Linear connector, the second source integration.
  *
- * Reads issues and comments from a single Linear project and normalizes them
- * into {@link SourceEvent}s for the reporting window. Token-agnostic: accepts
- * a Linear personal API key or an OAuth access token (the auth header form
- * differs, so it is detected from the token prefix).
+ * Reads issues and comments from one or more Linear projects and normalizes
+ * them into {@link SourceEvent}s for the reporting window. Token-agnostic:
+ * accepts a Linear personal API key or an OAuth access token (the auth header
+ * form differs, so it is detected from the token prefix).
  *
  * Linear's API is GraphQL, one endpoint, cursor pagination, and errors that
  * can arrive inside a `200` response body.
@@ -31,8 +31,8 @@ const COMMENTS_PER_ISSUE = 25;
 export interface LinearConnectorConfig {
   /** A Linear personal API key (`lin_api_…`) or an OAuth access token. */
   accessToken: string;
-  /** The Linear project this connector tracks. Required by `fetchActivity`. */
-  projectId?: string;
+  /** The Linear projects this connector tracks. Required by `fetchActivity`. */
+  projectIds?: readonly string[];
   /** Injectable fetch, defaults to the global. Override in tests. */
   fetch?: typeof fetch;
 }
@@ -250,13 +250,11 @@ export function createLinearConnector(config: LinearConnectorConfig): LinearConn
     return projects;
   }
 
-  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
-    const projectId = config.projectId?.trim();
-    if (!projectId) {
-      throw new ConnectorError(SOURCE, 'config', 'No Linear project is selected for this connector.');
-    }
-    assertWindow(SOURCE, window);
-
+  /** Pulls events for one Linear project. */
+  async function fetchProjectActivity(
+    projectId: string,
+    window: ConnectorWindow,
+  ): Promise<{ events: SourceEvent[]; itemsScanned: number }> {
     const filter = { updatedAt: { gte: window.since.toISOString() } };
     const issues: LinearIssue[] = [];
     let after: string | undefined;
@@ -311,7 +309,25 @@ export function createLinearConnector(config: LinearConnectorConfig): LinearConn
         });
       }
     }
+    return { events, itemsScanned: issues.length };
+  }
 
+  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
+    const projectIds = (config.projectIds ?? [])
+      .map((id) => id?.trim())
+      .filter((id): id is string => Boolean(id));
+    if (projectIds.length === 0) {
+      throw new ConnectorError(SOURCE, 'config', 'No Linear project is selected for this connector.');
+    }
+    assertWindow(SOURCE, window);
+
+    const events: SourceEvent[] = [];
+    let itemsScanned = 0;
+    for (const projectId of projectIds) {
+      const pull = await fetchProjectActivity(projectId, window);
+      events.push(...pull.events);
+      itemsScanned += pull.itemsScanned;
+    }
     events.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return {
@@ -320,7 +336,7 @@ export function createLinearConnector(config: LinearConnectorConfig): LinearConn
       fetchedAt: new Date().toISOString(),
       events,
       warnings: [],
-      stats: { itemsScanned: issues.length, eventsFound: events.length },
+      stats: { itemsScanned, eventsFound: events.length },
     };
   }
 

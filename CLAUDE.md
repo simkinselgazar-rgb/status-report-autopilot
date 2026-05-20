@@ -252,7 +252,7 @@ The closed-product build documented above is feature-complete and frozen as the 
 
 Local Docker e2e smoke-tested end-to-end: `docker compose up --build` brings the stack up in ~46s on a clean checkout, sign-up redirects to `/setup`, model save advances to the dashboard, and the empty state ("All caught up", "Set up your first client") renders correctly.
 
-**Backlog:** #24 multi-select connector targets (let a client track multiple Asana projects / Slack channels / Zoom hosts per source). Touches `SourceConnection` (jsonb shape), the connect-step picker, and each connector's `fetchActivity` loop. Fast-follow, roughly one day.
+**Multi-select connector targets shipped 2026-05-20 (#24).** A connection now holds many tracked projects, channels, or hosts instead of one. `SourceConnection` carries `projectIds: string[]` and `projectNames: string[]` (parallel arrays); the connection schema upgrades legacy single-target rows at parse time, so older deployments keep working. Every connector's `fetchActivity` loops the existing per-target pull across the array and merges events + warnings + stats into one digest. The connect step's project dropdown was replaced by a scroll-bounded checkbox list (impeccable + emil pass: row-wide click target, hover state, focus-visible ring, `aria-multiselectable` listbox); the connected line uses a smart-joined "Tracking {a}, {b} and N more" so a 50-channel pick never overflows. 163 vitest tests; typecheck + build green.
 
 ## Design System
 - Tokens live in `src/app/globals.css` (`@theme`): warm light palette, `paper`, `surface`, `sunk`, `ink`/`ink-soft`/`ink-faint`, `line`, `pine` (connected/done), `ochre`/`focus`.

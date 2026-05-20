@@ -96,7 +96,7 @@ describe('ZoomConnector.fetchActivity', () => {
   it('throws config when the window is inverted', async () => {
     const connector = createZoomConnector({
       ...CREDS,
-      userId: 'u1',
+      userIds: ['u1'],
       fetch: queuedFetch(mintOk()),
     });
     await expect(
@@ -107,7 +107,7 @@ describe('ZoomConnector.fetchActivity', () => {
   it('normalizes a recorded meeting, attaches a transcript excerpt, and skips out-of-window', async () => {
     const connector = createZoomConnector({
       ...CREDS,
-      userId: 'u1',
+      userIds: ['u1'],
       fetch: queuedFetch(
         mintOk(),
         json({
@@ -149,7 +149,7 @@ describe('ZoomConnector.fetchActivity', () => {
   it('falls back to meeting metadata when there is no transcript file', async () => {
     const connector = createZoomConnector({
       ...CREDS,
-      userId: 'u1',
+      userIds: ['u1'],
       fetch: queuedFetch(
         mintOk(),
         json({
@@ -173,7 +173,7 @@ describe('ZoomConnector.fetchActivity', () => {
   it('warns and falls back when a transcript download fails', async () => {
     const connector = createZoomConnector({
       ...CREDS,
-      userId: 'u1',
+      userIds: ['u1'],
       fetch: queuedFetch(
         mintOk(),
         json({
@@ -199,7 +199,7 @@ describe('ZoomConnector.fetchActivity', () => {
   it('follows recording pagination across pages', async () => {
     const connector = createZoomConnector({
       ...CREDS,
-      userId: 'u1',
+      userIds: ['u1'],
       fetch: queuedFetch(
         mintOk(),
         json({

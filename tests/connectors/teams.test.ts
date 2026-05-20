@@ -98,8 +98,7 @@ describe('TeamsConnector.fetchActivity', () => {
   it('throws config when the window is inverted', async () => {
     const connector = createTeamsConnector({
       ...CREDS,
-      teamId: 't1',
-      channelId: 'c1',
+      targets: [{ teamId: 't1', channelId: 'c1' }],
       fetch: queuedFetch(mintOk()),
     });
     await expect(
@@ -110,8 +109,7 @@ describe('TeamsConnector.fetchActivity', () => {
   it('normalizes a message, strips HTML, and skips out-of-window + system messages', async () => {
     const connector = createTeamsConnector({
       ...CREDS,
-      teamId: 't1',
-      channelId: 'c1',
+      targets: [{ teamId: 't1', channelId: 'c1' }],
       fetch: queuedFetch(
         mintOk(),
         json({
@@ -159,8 +157,7 @@ describe('TeamsConnector.fetchActivity', () => {
   it('skips a deleted message', async () => {
     const connector = createTeamsConnector({
       ...CREDS,
-      teamId: 't1',
-      channelId: 'c1',
+      targets: [{ teamId: 't1', channelId: 'c1' }],
       fetch: queuedFetch(
         mintOk(),
         json({
@@ -185,8 +182,7 @@ describe('TeamsConnector.fetchActivity', () => {
   it('follows message pagination across pages', async () => {
     const connector = createTeamsConnector({
       ...CREDS,
-      teamId: 't1',
-      channelId: 'c1',
+      targets: [{ teamId: 't1', channelId: 'c1' }],
       fetch: queuedFetch(
         mintOk(),
         json({

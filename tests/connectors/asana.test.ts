@@ -110,7 +110,7 @@ describe('AsanaConnector.fetchActivity', () => {
   it('rejects when the window is inverted', async () => {
     const connector = createAsanaConnector({
       accessToken: 'tok',
-      projectGid: 'P',
+      projectGids: ['P'],
       fetch: mockFetch(() => ({ body: { data: [] } })),
     });
 
@@ -182,7 +182,7 @@ describe('AsanaConnector.fetchActivity', () => {
 
     const connector = createAsanaConnector({
       accessToken: 'tok',
-      projectGid: 'P',
+      projectGids: ['P'],
       fetch: mockFetch((url) => {
         const storyMatch = url.pathname.match(/\/tasks\/(\w+)\/stories$/);
         if (storyMatch) return { body: { data: stories[storyMatch[1]!] ?? [] } };
@@ -212,7 +212,7 @@ describe('AsanaConnector.fetchActivity', () => {
   it('follows cursor pagination across task pages', async () => {
     const connector = createAsanaConnector({
       accessToken: 'tok',
-      projectGid: 'P',
+      projectGids: ['P'],
       fetch: mockFetch((url) => {
         if (url.pathname.endsWith('/stories')) return { body: { data: [] } };
         if (url.pathname.endsWith('/tasks')) {
@@ -240,6 +240,47 @@ describe('AsanaConnector.fetchActivity', () => {
 
     expect(digest.stats.itemsScanned).toBe(2);
     expect(digest.events.map((e) => e.title)).toEqual(['Task one', 'Task two']);
+  });
+
+  it('merges events across multiple tracked projects, sorted by timestamp', async () => {
+    const connector = createAsanaConnector({
+      accessToken: 'tok',
+      projectGids: ['P1', 'P2'],
+      fetch: mockFetch((url) => {
+        if (url.pathname.endsWith('/stories')) return { body: { data: [] } };
+        if (url.pathname.endsWith('/tasks')) {
+          const project = url.searchParams.get('project');
+          if (project === 'P1') {
+            return {
+              body: {
+                data: [
+                  { gid: 'A', name: 'Homepage tweak', created_at: '2026-05-13T08:00:00.000Z' },
+                ],
+              },
+            };
+          }
+          if (project === 'P2') {
+            return {
+              body: {
+                data: [
+                  { gid: 'B', name: 'Brand refresh kickoff', created_at: '2026-05-12T08:00:00.000Z' },
+                ],
+              },
+            };
+          }
+        }
+        throw new Error(`unexpected request: ${url.pathname} project=${url.searchParams.get('project')}`);
+      }),
+    });
+
+    const digest = await connector.fetchActivity(WINDOW);
+    expect(digest.stats.itemsScanned).toBe(2);
+    // Events are merged across both projects and sorted globally, P2's earlier
+    // task comes first even though P1 was pulled first.
+    expect(digest.events.map((e) => e.title)).toEqual([
+      'Brand refresh kickoff',
+      'Homepage tweak',
+    ]);
   });
 });
 

@@ -1,7 +1,7 @@
 /**
  * Slack connector, the third source integration.
  *
- * Reads messages from a single Slack channel and normalizes them into
+ * Reads messages from one or more Slack channels and normalizes them into
  * {@link SourceEvent}s (all `comment` kind. Slack carries chatter and flagged
  * blockers, not task state). Token-agnostic: a bot or user OAuth token.
  *
@@ -31,8 +31,8 @@ const PAGE_LIMIT = 200;
 export interface SlackConnectorConfig {
   /** A Slack OAuth access token (bot or user). */
   accessToken: string;
-  /** The Slack channel this connector tracks. Required by `fetchActivity`. */
-  channelId?: string;
+  /** The Slack channels this connector tracks. Required by `fetchActivity`. */
+  channelIds?: readonly string[];
   /** Injectable fetch, defaults to the global. Override in tests. */
   fetch?: typeof fetch;
 }
@@ -195,13 +195,11 @@ export function createSlackConnector(config: SlackConnectorConfig): SlackConnect
     return channels.map((c) => ({ id: c.id, name: c.name }));
   }
 
-  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
-    const channelId = config.channelId?.trim();
-    if (!channelId) {
-      throw new ConnectorError(SOURCE, 'config', 'No Slack channel is selected for this connector.');
-    }
-    assertWindow(SOURCE, window);
-
+  /** Pulls events for one Slack channel. */
+  async function fetchChannelActivity(
+    channelId: string,
+    window: ConnectorWindow,
+  ): Promise<{ events: SourceEvent[]; itemsScanned: number }> {
     const messages = await paginate(
       'conversations.history',
       {
@@ -234,6 +232,25 @@ export function createSlackConnector(config: SlackConnectorConfig): SlackConnect
         timestamp,
       });
     }
+    return { events, itemsScanned: messages.length };
+  }
+
+  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
+    const channelIds = (config.channelIds ?? [])
+      .map((id) => id?.trim())
+      .filter((id): id is string => Boolean(id));
+    if (channelIds.length === 0) {
+      throw new ConnectorError(SOURCE, 'config', 'No Slack channel is selected for this connector.');
+    }
+    assertWindow(SOURCE, window);
+
+    const events: SourceEvent[] = [];
+    let itemsScanned = 0;
+    for (const channelId of channelIds) {
+      const pull = await fetchChannelActivity(channelId, window);
+      events.push(...pull.events);
+      itemsScanned += pull.itemsScanned;
+    }
     events.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return {
@@ -242,7 +259,7 @@ export function createSlackConnector(config: SlackConnectorConfig): SlackConnect
       fetchedAt: new Date().toISOString(),
       events,
       warnings: [],
-      stats: { itemsScanned: messages.length, eventsFound: events.length },
+      stats: { itemsScanned, eventsFound: events.length },
     };
   }
 

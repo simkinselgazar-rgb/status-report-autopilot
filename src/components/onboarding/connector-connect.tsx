@@ -33,19 +33,20 @@ type Phase =
   /** The paste-your-credentials panel. */
   | { kind: 'credentials'; values: Credentials; verifying: boolean; error: string | null }
   | {
-      kind: 'project';
+      kind: 'projects';
       credentials: Credentials;
       accountName: string;
       workspaces: Workspace[];
       workspaceId: string;
       /** `null` while a project list is loading. */
       projects: Project[] | null;
-      projectId: string;
+      /** Ids the PM has checked, a subset of `projects`. */
+      selectedIds: string[];
       error: string | null;
     }
   | { kind: 'connected'; connection: SourceConnection };
 
-type ProjectPhase = Extract<Phase, { kind: 'project' }>;
+type ProjectsPhase = Extract<Phase, { kind: 'projects' }>;
 type CredentialsPhase = Extract<Phase, { kind: 'credentials' }>;
 
 const NETWORK_ERROR = "We couldn't reach the server, check your connection and try again.";
@@ -74,8 +75,9 @@ function allFilled(meta: ConnectorMeta, values: Credentials): boolean {
 /**
  * A connector row in the connect step, an inline, expandable connect flow:
  * "Connect" opens a paste-your-credentials panel (one field for a token
- * connector, several for Zoom), then verify → pick a workspace/project →
- * connected. Source-agnostic, driven entirely off `meta`.
+ * connector, several for Zoom), then verify → pick one or more workspace/
+ * projects → connected. A client can track many targets per source.
+ * Source-agnostic, driven entirely off `meta`.
  */
 export function ConnectorConnect({ meta, connection, onConnected, onDisconnect }: Props) {
   const [phase, setPhase] = useState<Phase>(
@@ -89,7 +91,7 @@ export function ConnectorConnect({ meta, connection, onConnected, onDisconnect }
       : meta.id === 'zoom'
         ? 'host'
         : 'project';
-  const panelOpen = phase.kind === 'credentials' || phase.kind === 'project';
+  const panelOpen = phase.kind === 'credentials' || phase.kind === 'projects';
 
   function cancel() {
     setPhase({ kind: 'idle', error: null });
@@ -144,13 +146,14 @@ export function ConnectorConnect({ meta, connection, onConnected, onDisconnect }
     workspaces: Workspace[],
     workspaceId: string,
   ) {
+    // Switching workspaces wipes the picked set, ids are workspace-scoped.
     const base = {
-      kind: 'project' as const,
+      kind: 'projects' as const,
       credentials,
       accountName,
       workspaces,
       workspaceId,
-      projectId: '',
+      selectedIds: [],
     };
     setPhase({ ...base, projects: null, error: null });
 
@@ -172,13 +175,26 @@ export function ConnectorConnect({ meta, connection, onConnected, onDisconnect }
     setPhase({ ...base, projects: data.projects, error: null });
   }
 
-  function selectProject(id: string) {
-    setPhase((p) => (p.kind === 'project' ? { ...p, projectId: id } : p));
+  function toggleProject(id: string) {
+    setPhase((p) =>
+      p.kind === 'projects'
+        ? {
+            ...p,
+            selectedIds: p.selectedIds.includes(id)
+              ? p.selectedIds.filter((sid) => sid !== id)
+              : [...p.selectedIds, id],
+          }
+        : p,
+    );
   }
 
-  function finalize(p: ProjectPhase) {
-    const project = p.projects?.find((pr) => pr.id === p.projectId);
-    if (!project) return;
+  function finalize(p: ProjectsPhase) {
+    if (p.selectedIds.length === 0 || !p.projects) return;
+    // Preserve the order the PM checked items, not the source's list order.
+    const selected = p.selectedIds
+      .map((id) => p.projects!.find((pr) => pr.id === id))
+      .filter((pr): pr is Project => Boolean(pr));
+    if (selected.length === 0) return;
     const workspace = p.workspaces.find((w) => w.id === p.workspaceId);
     // `ConnectorConnect` only renders for workspace/project sources; the
     // credential values carry the source-specific keys (accessToken, or the
@@ -187,8 +203,8 @@ export function ConnectorConnect({ meta, connection, onConnected, onDisconnect }
       source: meta.id,
       accountName: p.accountName,
       workspaceName: workspace?.name ?? '',
-      projectId: project.id,
-      projectName: project.name,
+      projectIds: selected.map((s) => s.id),
+      projectNames: selected.map((s) => s.name),
       ...p.credentials,
     } as SourceConnection;
     onConnected(next);
@@ -217,7 +233,7 @@ export function ConnectorConnect({ meta, connection, onConnected, onDisconnect }
           <p className="text-[0.95rem] font-medium text-ink">{meta.name}</p>
           {phase.kind === 'connected' ? (
             <p className="truncate text-[0.84rem] text-ink-faint">
-              Tracking {phase.connection.projectName}
+              Tracking {formatTrackedTargets(phase.connection.projectNames, projectNoun)}
             </p>
           ) : idleError ? (
             <p className="text-[0.84rem] leading-relaxed text-danger anim-fade">{idleError}</p>
@@ -259,8 +275,12 @@ export function ConnectorConnect({ meta, connection, onConnected, onDisconnect }
                 onCancel={cancel}
               />
             ) : null}
-            {phase.kind === 'project'
-              ? renderProjectPanel(phase, { loadProjects, selectProject, finalize, cancel }, projectNoun)
+            {phase.kind === 'projects'
+              ? renderProjectsPanel(
+                  phase,
+                  { loadProjects, toggleProject, finalize, cancel },
+                  projectNoun,
+                )
               : null}
           </div>
         </div>
@@ -346,8 +366,8 @@ function CredentialPanel({
   );
 }
 
-function renderProjectPanel(
-  p: ProjectPhase,
+function renderProjectsPanel(
+  p: ProjectsPhase,
   actions: {
     loadProjects: (
       credentials: Credentials,
@@ -355,8 +375,8 @@ function renderProjectPanel(
       workspaces: Workspace[],
       workspaceId: string,
     ) => void;
-    selectProject: (id: string) => void;
-    finalize: (p: ProjectPhase) => void;
+    toggleProject: (id: string) => void;
+    finalize: (p: ProjectsPhase) => void;
     cancel: () => void;
   },
   /** What the picked thing is called, "project" / "channel" / "host". */
@@ -364,7 +384,9 @@ function renderProjectPanel(
 ) {
   const loading = p.projects === null;
   const noProjects = p.projects !== null && p.projects.length === 0;
+  const pickedCount = p.selectedIds.length;
   const Noun = `${noun[0]!.toUpperCase()}${noun.slice(1)}`;
+  const NounPlural = `${Noun}s`;
 
   return (
     <div className="anim-fade">
@@ -391,7 +413,9 @@ function renderProjectPanel(
       ) : null}
 
       <div className="mt-3">
-        <label className="block text-[0.82rem] font-medium text-ink-soft">{Noun} to track</label>
+        <label className="block text-[0.82rem] font-medium text-ink-soft">
+          {NounPlural} to track
+        </label>
         {loading ? (
           <p className="mt-2 flex h-11 items-center text-[0.9rem] text-ink-faint">
             Loading {noun}s…
@@ -401,16 +425,12 @@ function renderProjectPanel(
             No active {noun}s in this workspace.
           </p>
         ) : (
-          <SelectField value={p.projectId} onChange={actions.selectProject}>
-            <option value="" disabled>
-              Choose a {noun}…
-            </option>
-            {p.projects!.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </SelectField>
+          <ProjectChecklist
+            projects={p.projects!}
+            selectedIds={p.selectedIds}
+            onToggle={actions.toggleProject}
+            noun={noun}
+          />
         )}
       </div>
 
@@ -430,8 +450,8 @@ function renderProjectPanel(
       ) : null}
 
       <div className="mt-3 flex items-center gap-2">
-        <Button size="sm" onClick={() => actions.finalize(p)} disabled={p.projectId.length === 0}>
-          Use this {noun}
+        <Button size="sm" onClick={() => actions.finalize(p)} disabled={pickedCount === 0}>
+          {pickedCount > 1 ? `Use these ${noun}s` : `Use this ${noun}`}
         </Button>
         <Button variant="ghost" size="sm" onClick={actions.cancel}>
           Cancel
@@ -439,6 +459,65 @@ function renderProjectPanel(
       </div>
     </div>
   );
+}
+
+/**
+ * The multi-select picker. A scroll-bounded list of checkbox rows so a chatty
+ * Slack workspace's 100+ channels stay legible. Click a row anywhere, not just
+ * the box, to toggle.
+ */
+function ProjectChecklist({
+  projects,
+  selectedIds,
+  onToggle,
+  noun,
+}: {
+  projects: Project[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  noun: string;
+}) {
+  return (
+    <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-line bg-sunk">
+      <ul role="listbox" aria-label={`${noun}s to track`} aria-multiselectable="true">
+        {projects.map((project, index) => {
+          const checked = selectedIds.includes(project.id);
+          const inputId = `target-${project.id}`;
+          return (
+            <li key={project.id} className={index > 0 ? 'border-t border-line' : undefined}>
+              <label
+                htmlFor={inputId}
+                className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-[0.9rem] text-ink transition-colors duration-150 ease-out hover:bg-surface"
+              >
+                <input
+                  id={inputId}
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(project.id)}
+                  className="size-4 cursor-pointer rounded border-line text-ink accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                />
+                <span className="truncate">{project.name}</span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Smart-joined tracking summary: one name verbatim, two names with "and",
+ * three names with the Oxford rhythm, four-plus with "and N more" so the
+ * connector row never overflows on a chatty workspace.
+ */
+function formatTrackedTargets(names: readonly string[], noun: string): string {
+  const labels = names.filter((name) => name.trim().length > 0);
+  if (labels.length === 0) return `${names.length} ${noun}${names.length === 1 ? '' : 's'}`;
+  if (labels.length === 1) return labels[0]!;
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  if (labels.length === 3) return `${labels[0]}, ${labels[1]} and ${labels[2]}`;
+  return `${labels[0]}, ${labels[1]} and ${labels.length - 2} more`;
 }
 
 // --- small parts -----------------------------------------------------------

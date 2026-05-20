@@ -1,9 +1,9 @@
 /**
  * Asana connector, the first real source integration.
  *
- * Reads tasks, milestones, and activity history ("who moved what") from a
- * single Asana project and normalizes them into {@link SourceEvent}s for the
- * reporting window. Token-agnostic: accepts a Personal Access Token or an
+ * Reads tasks, milestones, and activity history ("who moved what") from one
+ * or more Asana projects and normalizes them into {@link SourceEvent}s for
+ * the reporting window. Token-agnostic: accepts a Personal Access Token or an
  * OAuth bearer token, the hosted OAuth flow lands later without touching this
  * file.
  */
@@ -30,8 +30,8 @@ const MAX_TASKS_FOR_STORIES = 250; // big-launch guardrail, see design brief §7
 export interface AsanaConnectorConfig {
   /** Asana access token, a Personal Access Token or an OAuth bearer token. */
   accessToken: string;
-  /** The Asana project this connector tracks. Required by `fetchActivity`. */
-  projectGid?: string;
+  /** The Asana projects this connector tracks. Required by `fetchActivity`. */
+  projectGids?: readonly string[];
   /** Injectable fetch, defaults to the global. Override in tests. */
   fetch?: typeof fetch;
 }
@@ -217,13 +217,11 @@ export function createAsanaConnector(config: AsanaConnectorConfig): AsanaConnect
     return projects.map((p) => ({ gid: p.gid, name: p.name }));
   }
 
-  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
-    const projectGid = config.projectGid?.trim();
-    if (!projectGid) {
-      throw new ConnectorError(SOURCE, 'config', 'No Asana project is selected for this connector.');
-    }
-    assertWindow(SOURCE, window);
-
+  /** Pulls events for one Asana project. */
+  async function fetchProjectActivity(
+    projectGid: string,
+    window: ConnectorWindow,
+  ): Promise<{ events: SourceEvent[]; warnings: string[]; itemsScanned: number }> {
     const warnings: string[] = [];
     const tasks = await requestList(
       '/tasks',
@@ -304,6 +302,27 @@ export function createAsanaConnector(config: AsanaConnectorConfig): AsanaConnect
       }
     }
 
+    return { events, warnings, itemsScanned: tasks.length };
+  }
+
+  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
+    const projectGids = (config.projectGids ?? [])
+      .map((gid) => gid?.trim())
+      .filter((gid): gid is string => Boolean(gid));
+    if (projectGids.length === 0) {
+      throw new ConnectorError(SOURCE, 'config', 'No Asana project is selected for this connector.');
+    }
+    assertWindow(SOURCE, window);
+
+    const events: SourceEvent[] = [];
+    const warnings: string[] = [];
+    let itemsScanned = 0;
+    for (const projectGid of projectGids) {
+      const pull = await fetchProjectActivity(projectGid, window);
+      events.push(...pull.events);
+      warnings.push(...pull.warnings);
+      itemsScanned += pull.itemsScanned;
+    }
     events.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return {
@@ -312,7 +331,7 @@ export function createAsanaConnector(config: AsanaConnectorConfig): AsanaConnect
       fetchedAt: new Date().toISOString(),
       events,
       warnings,
-      stats: { itemsScanned: tasks.length, eventsFound: events.length },
+      stats: { itemsScanned, eventsFound: events.length },
     };
   }
 

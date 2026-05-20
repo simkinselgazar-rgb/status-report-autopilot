@@ -125,7 +125,7 @@ describe('LinearConnector.fetchActivity', () => {
   it('throws config when the window is inverted', async () => {
     const connector = createLinearConnector({
       accessToken: 'lin_api_x',
-      projectId: 'p1',
+      projectIds: ['p1'],
       fetch: queuedFetch(json(activityBody([]))),
     });
     await expect(
@@ -136,7 +136,7 @@ describe('LinearConnector.fetchActivity', () => {
   it('throws not_found when the project is missing', async () => {
     const connector = createLinearConnector({
       accessToken: 'lin_api_x',
-      projectId: 'gone',
+      projectIds: ['gone'],
       fetch: queuedFetch(json({ data: { project: null } })),
     });
     await expect(connector.fetchActivity(WINDOW)).rejects.toMatchObject({ code: 'not_found' });
@@ -145,7 +145,7 @@ describe('LinearConnector.fetchActivity', () => {
   it('normalizes created + completed issues and comments inside the window', async () => {
     const connector = createLinearConnector({
       accessToken: 'lin_api_x',
-      projectId: 'p1',
+      projectIds: ['p1'],
       fetch: queuedFetch(
         json(
           activityBody([
@@ -174,7 +174,7 @@ describe('LinearConnector.fetchActivity', () => {
   it('excludes events and comments outside the window', async () => {
     const connector = createLinearConnector({
       accessToken: 'lin_api_x',
-      projectId: 'p1',
+      projectIds: ['p1'],
       fetch: queuedFetch(
         json(
           activityBody([
@@ -199,7 +199,7 @@ describe('LinearConnector.fetchActivity', () => {
   it('follows issue pagination across pages', async () => {
     const connector = createLinearConnector({
       accessToken: 'lin_api_x',
-      projectId: 'p1',
+      projectIds: ['p1'],
       fetch: queuedFetch(
         json(activityBody([issue({ id: 'i1' })], { hasNextPage: true, endCursor: 'cur-1' })),
         json(activityBody([issue({ id: 'i2', title: 'Second issue' })])),
@@ -212,7 +212,7 @@ describe('LinearConnector.fetchActivity', () => {
   it('retries a 429 and then succeeds', async () => {
     const connector = createLinearConnector({
       accessToken: 'lin_api_x',
-      projectId: 'p1',
+      projectIds: ['p1'],
       fetch: queuedFetch(
         json({}, { status: 429, headers: { 'Retry-After': '0' } }),
         json(activityBody([issue()])),

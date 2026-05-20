@@ -6,8 +6,8 @@ import type { SourceConnection } from '@/lib/onboarding/types';
 const target = {
   accountName: 'Acme',
   workspaceName: 'Acme HQ',
-  projectName: 'Site redesign',
-  projectId: 'P1',
+  projectNames: ['Site redesign'],
+  projectIds: ['P1'],
 };
 
 const asana: SourceConnection = { source: 'asana', accessToken: 'tok', ...target };
@@ -26,7 +26,8 @@ const teams: SourceConnection = {
   clientId: 'cid',
   clientSecret: 'sec',
   ...target,
-  projectId: 't1|19:abc@thread.tacv2',
+  projectIds: ['t1|19:abc@thread.tacv2'],
+  projectNames: ['#general'],
 };
 
 describe('sourceConnectionSchema', () => {
@@ -54,8 +55,34 @@ describe('sourceConnectionSchema', () => {
     expect(sourceConnectionSchema.safeParse({ ...asana, source: 'jira' }).success).toBe(false);
   });
 
-  it('rejects a token connection with no project', () => {
-    expect(sourceConnectionSchema.safeParse({ ...asana, projectId: '' }).success).toBe(false);
+  it('rejects a token connection with no target', () => {
+    expect(sourceConnectionSchema.safeParse({ ...asana, projectIds: [] }).success).toBe(false);
+  });
+
+  it('accepts a connection with multiple tracked targets', () => {
+    const multi: SourceConnection = {
+      ...asana,
+      projectIds: ['P1', 'P2', 'P3'],
+      projectNames: ['Site redesign', 'Brand refresh', 'Annual review'],
+    };
+    expect(sourceConnectionSchema.safeParse(multi).success).toBe(true);
+  });
+
+  it('upgrades a legacy single-target connection at parse time', () => {
+    const legacy = {
+      source: 'asana',
+      accessToken: 'tok',
+      accountName: 'Acme',
+      workspaceName: 'Acme HQ',
+      projectName: 'Site redesign',
+      projectId: 'P1',
+    };
+    const parsed = sourceConnectionSchema.parse(legacy) as Extract<
+      SourceConnection,
+      { source: 'asana' }
+    >;
+    expect(parsed.projectIds).toEqual(['P1']);
+    expect(parsed.projectNames).toEqual(['Site redesign']);
   });
 
   it('rejects a token connection with no access token', () => {

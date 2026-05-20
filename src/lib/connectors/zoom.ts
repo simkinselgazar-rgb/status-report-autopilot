@@ -1,10 +1,11 @@
 /**
  * Zoom connector, the fifth (and last v1) source integration.
  *
- * Reads a Zoom user's cloud recordings for the window and normalizes each
- * recorded meeting into a `meeting`-kind {@link SourceEvent}. When a recording
- * has a transcript file, a plain-text excerpt of what was said rides along as
- * the event `detail`, the transcript is what makes Zoom worth a connector.
+ * Reads one or more Zoom users' cloud recordings for the window and
+ * normalizes each recorded meeting into a `meeting`-kind {@link SourceEvent}.
+ * When a recording has a transcript file, a plain-text excerpt of what was
+ * said rides along as the event `detail`, the transcript is what makes Zoom
+ * worth a connector.
  *
  * Zoom has no workspace layer, an account holds users directly, so
  * `verify()` returns a single synthetic workspace (the account). With
@@ -40,8 +41,8 @@ export interface ZoomConnectorConfig {
   accountId: string;
   clientId: string;
   clientSecret: string;
-  /** The Zoom user whose cloud recordings this connector reads. Required by `fetchActivity`. */
-  userId?: string;
+  /** The Zoom users whose cloud recordings this connector reads. Required by `fetchActivity`. */
+  userIds?: readonly string[];
   /** Injectable fetch, defaults to the global. Override in tests. */
   fetch?: typeof fetch;
 }
@@ -217,13 +218,11 @@ export function createZoomConnector(config: ZoomConnectorConfig): ZoomConnector 
     return (page.users ?? []).map((user) => ({ id: user.id, name: displayName(user) }));
   }
 
-  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
-    const userId = config.userId?.trim();
-    if (!userId) {
-      throw new ConnectorError(SOURCE, 'config', 'No Zoom user is selected for this connector.');
-    }
-    assertWindow(SOURCE, window);
-
+  /** Pulls events for one Zoom user's recordings. */
+  async function fetchUserActivity(
+    userId: string,
+    window: ConnectorWindow,
+  ): Promise<{ events: SourceEvent[]; warnings: string[]; itemsScanned: number }> {
     const meetings: z.infer<typeof recordingMeetingSchema>[] = [];
     let pageToken: string | undefined;
     do {
@@ -276,6 +275,27 @@ export function createZoomConnector(config: ZoomConnectorConfig): ZoomConnector 
         url: meeting.share_url,
       });
     }
+    return { events, warnings, itemsScanned: meetings.length };
+  }
+
+  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
+    const userIds = (config.userIds ?? [])
+      .map((id) => id?.trim())
+      .filter((id): id is string => Boolean(id));
+    if (userIds.length === 0) {
+      throw new ConnectorError(SOURCE, 'config', 'No Zoom user is selected for this connector.');
+    }
+    assertWindow(SOURCE, window);
+
+    const events: SourceEvent[] = [];
+    const warnings: string[] = [];
+    let itemsScanned = 0;
+    for (const userId of userIds) {
+      const pull = await fetchUserActivity(userId, window);
+      events.push(...pull.events);
+      warnings.push(...pull.warnings);
+      itemsScanned += pull.itemsScanned;
+    }
     events.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return {
@@ -284,7 +304,7 @@ export function createZoomConnector(config: ZoomConnectorConfig): ZoomConnector 
       fetchedAt: new Date().toISOString(),
       events,
       warnings,
-      stats: { itemsScanned: meetings.length, eventsFound: events.length },
+      stats: { itemsScanned, eventsFound: events.length },
     };
   }
 

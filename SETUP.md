@@ -181,19 +181,21 @@ If the app and the model are on different machines, the endpoint URL must be rea
 
 Each connector uses **bring-your-own-credentials**: paste a token (or for Zoom and Teams, an OAuth app's credential triple) in the onboarding wizard. There are no per-deployer OAuth apps to register on the app side.
 
+You can pick **more than one target per source**, multiple Asana projects, multiple Slack channels, multiple Zoom hosts, and so on. The picker is a checkbox list, the report blends activity across every selected target.
+
 ### Asana
 
 1. In Asana, open **My Settings → Apps → Manage developer apps**.
 2. Click **Create new token**.
 3. Copy the token (it starts with `0/`).
-4. In the wizard's *Asana* row, paste it, pick the workspace + project to track.
+4. In the wizard's *Asana* row, paste it, pick the workspace, then check the projects to track.
 
 ### Linear
 
 1. Open **Settings → API** in Linear.
 2. Under **Personal API keys**, click **Create key**.
 3. Copy the key (starts with `lin_api_`).
-4. Paste in the wizard's *Linear* row, pick the team + project.
+4. Paste in the wizard's *Linear* row, pick the team, then check the projects to track.
 
 ### Slack
 
@@ -207,7 +209,7 @@ Slack requires a small custom app. There is no shorter path that lets the connec
 3. Click **Install to Workspace** and approve.
 4. Copy the **Bot User OAuth Token** (starts with `xoxb-`).
 5. Invite the bot to each channel you want to track (`/invite @your-bot-name` from the channel itself). **The bot only sees channels it has been invited to.**
-6. Paste the token in the wizard's *Slack* row, pick the channel.
+6. Paste the token in the wizard's *Slack* row, then check the channels to track.
 
 ### Zoom
 
@@ -219,7 +221,7 @@ The connector reads cloud-recording transcripts via the Server-to-Server OAuth g
    - `user:read` (or `user:read:admin` for an account with many users)
    - `cloud_recording:read` (or `cloud_recording:read:admin`)
 4. Note the **Account ID**, **Client ID**, and **Client Secret** from the app's *App credentials* page.
-5. Paste all three in the wizard's *Zoom* row, pick which user's recordings this client's reports draw from.
+5. Paste all three in the wizard's *Zoom* row, then check the users whose recordings this client's reports draw from.
 
 When a recording has a transcript file, the connector pulls the VTT and rides a plain-text excerpt along as the event detail. That is the reason Zoom earns a connector over plain calendar data.
 
@@ -236,7 +238,7 @@ The Teams connector reads channel messages via Microsoft Graph using app-only (c
    - `Channel.ReadBasic.All`
    - `ChannelMessage.Read.All`
 6. Click **Grant admin consent** for your tenant.
-7. Paste the tenant id, client id, and secret value in the wizard's *Microsoft Teams* row. Pick a team, then a channel.
+7. Paste the tenant id, client id, and secret value in the wizard's *Microsoft Teams* row. Pick a team, then check the channels to track. Channels from a single connection must belong to the same team; add a second Teams connection to track another team's channels.
 
 ---
 

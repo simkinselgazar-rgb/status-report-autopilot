@@ -206,8 +206,8 @@ describe('POST /api/clients', () => {
         accessToken: 'tok',
         accountName: 'Northwind',
         workspaceName: 'Studio',
-        projectId: 'P1',
-        projectName: 'Site redesign',
+        projectIds: ['P1'],
+        projectNames: ['Site redesign'],
       },
     ],
     report: {

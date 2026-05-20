@@ -97,37 +97,41 @@ export const CONNECTORS: readonly ConnectorMeta[] = [
   },
 ];
 
-/** Fields shared by every connected source, the tracked target. */
+/** Fields shared by every connected source, the tracked targets. */
 interface ConnectionBase {
   /** Display name of the connected account. */
   accountName: string;
-  /** The workspace / team the tracked project lives in. */
+  /** The workspace / team the tracked projects live in. */
   workspaceName: string;
-  /** Display name of the tracked project. */
-  projectName: string;
-  /** The tracked project's id (Asana gid / Linear project id / Zoom user id). */
-  projectId: string;
+  /** Display names of the tracked projects, parallel to `projectIds`. */
+  projectNames: string[];
+  /**
+   * The tracked projects' ids (Asana gids / Linear project ids / Zoom user
+   * ids / Slack channel ids / Teams `teamId|channelId` composites). At least
+   * one. A client can track many targets per source.
+   */
+  projectIds: string[];
 }
 
-/** A connected Asana source, a pasted token plus the chosen project. */
+/** A connected Asana source, a pasted token plus one or more chosen projects. */
 export interface AsanaConnection extends ConnectionBase {
   source: 'asana';
   accessToken: string;
 }
 
-/** A connected Linear source, a pasted API key plus the chosen project. */
+/** A connected Linear source, a pasted API key plus one or more chosen projects. */
 export interface LinearConnection extends ConnectionBase {
   source: 'linear';
   accessToken: string;
 }
 
-/** A connected Slack source, a pasted bot token plus the chosen channel. */
+/** A connected Slack source, a pasted bot token plus one or more chosen channels. */
 export interface SlackConnection extends ConnectionBase {
   source: 'slack';
   accessToken: string;
 }
 
-/** A connected Zoom source. Server-to-Server credentials plus the chosen user. */
+/** A connected Zoom source. Server-to-Server credentials plus one or more chosen users. */
 export interface ZoomConnection extends ConnectionBase {
   source: 'zoom';
   accountId: string;
@@ -136,8 +140,10 @@ export interface ZoomConnection extends ConnectionBase {
 }
 
 /**
- * A connected Microsoft Teams source. Entra app-only credentials plus the
- * chosen channel. `projectId` carries a `teamId|channelId` composite.
+ * A connected Microsoft Teams source. Entra app-only credentials plus one or
+ * more chosen channels. Each `projectIds` entry is a `teamId|channelId`
+ * composite (a team id is a GUID and a channel id starts with `19:`, neither
+ * contains a `|`).
  */
 export interface TeamsConnection extends ConnectionBase {
   source: 'teams';

@@ -1,15 +1,17 @@
 /**
  * Microsoft Teams connector, promoted from v1.1 into v1.
  *
- * Reads posts from a single Teams channel and normalizes them into
+ * Reads posts from one or more Teams channels and normalizes them into
  * {@link SourceEvent}s (all `comment` kind, channel posts carry chatter and
  * announcements, not task state).
  *
  * Microsoft has a two-level structure, an account holds teams, a team holds
  * channels, so the connector maps a team to a workspace and a channel to a
- * "project". A connection's `projectId` carries a `teamId|channelId` composite
- * (a team id is a GUID and a channel id starts with `19:`, neither contains a
- * `|`) so a single id locates the channel without a separate stored field.
+ * "project". A connection's `projectIds` entries each carry a
+ * `teamId|channelId` composite (a team id is a GUID and a channel id starts
+ * with `19:`, neither contains a `|`) so a single id locates the channel
+ * without a separate stored field. The connection schema splits each id back
+ * into a `{teamId, channelId}` pair before handing it to this connector.
  *
  * Auth is app-only: the deployer pastes an Entra app's tenant/client/secret and
  * the connector mints its own Microsoft Graph tokens, see `teams-oauth.ts`.
@@ -38,15 +40,19 @@ const MESSAGE_DETAIL_LIMIT = 1000;
 /** Joins a team id and channel id into a single `projectId`. */
 const TARGET_SEPARATOR = '|';
 
+/** One Teams channel target, split from a `teamId|channelId` composite. */
+export interface TeamsTarget {
+  teamId: string;
+  channelId: string;
+}
+
 export interface TeamsConnectorConfig {
   /** Microsoft Entra app-only credentials, the connector mints tokens from these. */
   tenantId: string;
   clientId: string;
   clientSecret: string;
-  /** The Teams team the tracked channel lives in. Required by `fetchActivity`. */
-  teamId?: string;
-  /** The Teams channel this connector tracks. Required by `fetchActivity`. */
-  channelId?: string;
+  /** The Teams channels this connector tracks. Required by `fetchActivity`. */
+  targets?: readonly TeamsTarget[];
   /** Injectable fetch, defaults to the global. Override in tests. */
   fetch?: typeof fetch;
 }
@@ -291,14 +297,12 @@ export function createTeamsConnector(config: TeamsConnectorConfig): TeamsConnect
     }
   }
 
-  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
-    const teamId = config.teamId?.trim();
-    const channelId = config.channelId?.trim();
-    if (!teamId || !channelId) {
-      throw new ConnectorError(SOURCE, 'config', 'No Teams channel is selected for this connector.');
-    }
-    assertWindow(SOURCE, window);
-
+  /** Pulls events for one Teams channel. */
+  async function fetchChannelActivity(
+    teamId: string,
+    channelId: string,
+    window: ConnectorWindow,
+  ): Promise<{ events: SourceEvent[]; warnings: string[]; itemsScanned: number }> {
     const messages: TeamsMessage[] = [];
     const warnings: string[] = [];
     let url: string | undefined =
@@ -344,6 +348,27 @@ export function createTeamsConnector(config: TeamsConnectorConfig): TeamsConnect
         url: message.webUrl,
       });
     }
+    return { events, warnings, itemsScanned: messages.length };
+  }
+
+  async function fetchActivity(window: ConnectorWindow): Promise<ActivityDigest> {
+    const targets = (config.targets ?? [])
+      .map((t) => ({ teamId: t.teamId?.trim(), channelId: t.channelId?.trim() }))
+      .filter((t): t is TeamsTarget => Boolean(t.teamId && t.channelId));
+    if (targets.length === 0) {
+      throw new ConnectorError(SOURCE, 'config', 'No Teams channel is selected for this connector.');
+    }
+    assertWindow(SOURCE, window);
+
+    const events: SourceEvent[] = [];
+    const warnings: string[] = [];
+    let itemsScanned = 0;
+    for (const { teamId, channelId } of targets) {
+      const pull = await fetchChannelActivity(teamId, channelId, window);
+      events.push(...pull.events);
+      warnings.push(...pull.warnings);
+      itemsScanned += pull.itemsScanned;
+    }
     events.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
     return {
@@ -352,7 +377,7 @@ export function createTeamsConnector(config: TeamsConnectorConfig): TeamsConnect
       fetchedAt: new Date().toISOString(),
       events,
       warnings,
-      stats: { itemsScanned: messages.length, eventsFound: events.length },
+      stats: { itemsScanned, eventsFound: events.length },
     };
   }
 
