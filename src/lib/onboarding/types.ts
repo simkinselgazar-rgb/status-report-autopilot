@@ -50,8 +50,8 @@ export const CONNECTORS: readonly ConnectorMeta[] = [
     available: true,
     credentials: {
       fields: [{ key: 'accessToken', label: 'Personal API key', secret: true }],
-      url: 'https://linear.app/settings/api',
-      hint: 'In Linear: Settings → API → Personal API keys → Create key.',
+      url: 'https://linear.app/settings/account/security',
+      hint: 'In Linear: Settings → Security and access → Personal API keys → Create key. Scope it to read-only, the connector never writes.',
     },
   },
   {

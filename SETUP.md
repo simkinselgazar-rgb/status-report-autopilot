@@ -14,10 +14,11 @@ This guide walks through running the app on your own infrastructure end-to-end.
 4. [Choose an AI model](#choose-an-ai-model)
 5. [Running a local model](#running-a-local-model)
 6. [Connect your project tools](#connect-your-project-tools)
-7. [Email delivery](#email-delivery)
-8. [Recurring generation](#recurring-generation)
-9. [Updating + maintenance](#updating--maintenance)
-10. [Troubleshooting](#troubleshooting)
+7. [Onboard your first client](#onboard-your-first-client)
+8. [Email delivery](#email-delivery)
+9. [Recurring generation](#recurring-generation)
+10. [Updating + maintenance](#updating--maintenance)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -183,21 +184,46 @@ Each connector uses **bring-your-own-credentials**: paste a token (or for Zoom a
 
 You can pick **more than one target per source**, multiple Asana projects, multiple Slack channels, multiple Zoom hosts, and so on. The picker is a checkbox list, the report blends activity across every selected target.
 
+> **Least privilege.** Status Report Autopilot only ever reads from your project tools, it never writes. Where a source supports it, scope the credentials to read-only. Per-source notes are inlined below.
+
+### Who does what
+
+Status Report Autopilot is self-hosted. A few different people are involved in setup, and it matters for the connectors:
+
+| Role | Who | What they do |
+|---|---|---|
+| **Deployer** | You, the agency owner or tech lead | Self-hosts the app (`docker compose up`), configures the AI model, sets `APP_URL`. One-time. |
+| **Agency PM** | An account manager at the agency | Uses the dashboard, runs onboarding once per client, approves and sends the weekly report. |
+| **Client (or client's IT)** | Your client's contact | Provides credentials for the client's project tools where admin access is required. |
+
+Asana and Linear use **personal tokens**, so an agency PM can usually create them in the client's account on the client's behalf (with permission). Quick.
+
+**Slack, Zoom, and Microsoft Teams each require building or registering an app inside the client's workspace, which needs the client's IT or workspace admin to participate.** This is a vendor limitation, not something the connector can shortcut. Plan a 15-30 minute call with the client's admin to walk through those three together, the steps below are written assuming an admin is in front of the screen.
+
 ### Asana
+
+> **Who:** the client, or an agency PM with member access to the client's Asana account. No admin rights needed.
 
 1. In Asana, open **My Settings → Apps → Manage developer apps**.
 2. Click **Create new token**.
 3. Copy the token (it starts with `0/`).
 4. In the wizard's *Asana* row, paste it, pick the workspace, then check the projects to track.
 
+> Asana Personal Access Tokens are full-account credentials, Asana does not let you scope a PAT to read-only. The connector only reads, so the practical hygiene is to (a) create the token specifically for this app, (b) name it so you can recognize it (e.g. `status-report-autopilot`), and (c) revoke it from the same Manage developer apps page when you stop using it. Need real scoping? Use an OAuth app + the OAuth `tasks:read` scope.
+
 ### Linear
 
-1. Open **Settings → API** in Linear.
+> **Who:** the client, or an agency PM with member access to the client's Linear workspace. No admin rights needed.
+
+1. Open **Settings → Security and access** in Linear.
 2. Under **Personal API keys**, click **Create key**.
-3. Copy the key (starts with `lin_api_`).
-4. Paste in the wizard's *Linear* row, pick the team, then check the projects to track.
+3. **Scope the key to read-only.** Linear lets you tick exactly which actions a Personal API key can perform, only check the read scopes (e.g. `read:issues`, `read:projects`, `read:teams`). Do not check any `write:` or `admin:` scopes, the connector never writes.
+4. Copy the key (starts with `lin_api_`).
+5. Paste in the wizard's *Linear* row, pick the team, then check the projects to track.
 
 ### Slack
+
+> **Who:** the client's Slack **workspace admin**. Slack requires permission to create and install apps in the workspace, and only an admin can grant the consent in step 3. Block off ~15 minutes with the admin.
 
 Slack requires a small custom app. There is no shorter path that lets the connector read a channel.
 
@@ -211,7 +237,11 @@ Slack requires a small custom app. There is no shorter path that lets the connec
 5. Invite the bot to each channel you want to track (`/invite @your-bot-name` from the channel itself). **The bot only sees channels it has been invited to.**
 6. Paste the token in the wizard's *Slack* row, then check the channels to track.
 
+> All three scopes above are read-only. **Do not add any `:write` or `:manage` scopes**, the connector never writes to Slack.
+
 ### Zoom
+
+> **Who:** the client's Zoom **account owner or admin**. Server-to-Server OAuth apps can only be built by accounts with the right Marketplace privileges. Block off ~20 minutes with the admin.
 
 The connector reads cloud-recording transcripts via the Server-to-Server OAuth grant. You create one Zoom app per Zoom account; the same credentials cover every Zoom user you track from the picker.
 
@@ -223,9 +253,13 @@ The connector reads cloud-recording transcripts via the Server-to-Server OAuth g
 4. Note the **Account ID**, **Client ID**, and **Client Secret** from the app's *App credentials* page.
 5. Paste all three in the wizard's *Zoom* row, then check the users whose recordings this client's reports draw from.
 
+> Both scopes above are read-only. **Do not add any `:write` or `:update` scopes**, the connector never writes to Zoom.
+
 When a recording has a transcript file, the connector pulls the VTT and rides a plain-text excerpt along as the event detail. That is the reason Zoom earns a connector over plain calendar data.
 
 ### Microsoft Teams
+
+> **Who:** the client's **Microsoft Entra ID (Azure AD) tenant admin, or someone with the Application Administrator role.** Registering an app, creating a secret, and granting admin consent to the Graph permissions in step 6 each need elevated rights. This one usually means looping in the client's IT department. Block off ~30 minutes.
 
 The Teams connector reads channel messages via Microsoft Graph using app-only (client-credentials) auth.
 
@@ -239,6 +273,37 @@ The Teams connector reads channel messages via Microsoft Graph using app-only (c
    - `ChannelMessage.Read.All`
 6. Click **Grant admin consent** for your tenant.
 7. Paste the tenant id, client id, and secret value in the wizard's *Microsoft Teams* row. Pick a team, then check the channels to track. Channels from a single connection must belong to the same team; add a second Teams connection to track another team's channels.
+
+> All three Graph permissions above end in `.Read` or `.ReadBasic`, they are read-only. **Do not add any `.ReadWrite` or `.Write` permissions**, the connector never writes to Teams or your tenant.
+
+---
+
+## Onboard your first client
+
+With credentials in hand, sign in to the dashboard, click **Set up your first client**, and walk the four-step wizard:
+
+1. **Client identity.** The client's display name (shown in the dashboard) and the email an approved report sends to.
+2. **Connect sources.** For each of the five connectors: paste credentials, pick the workspace, check the projects / channels / hosts to track. You can pick more than one per source, the report blends activity across every selected target.
+3. **Voice.** Tone (buttoned / professional / warm), length (headlines / balanced / thorough), the sign-off line, and an optional writing sample. The narrative agent mirrors the sample's rhythm and word choice, not its content.
+4. **Cadence.** Weekday + time-of-day + timezone for the recurring weekly report. The first draft is generated immediately, the recurring report fires on this slot every week thereafter.
+
+After step 4, the wizard runs the **magic moment**, it pulls every connected source, runs the narrative agent against your configured model, and lands on a first-draft preview. Hit the primary button to save the client and continue to the dashboard.
+
+### The honest-window gotcha
+
+The magic moment looks at the **previous Monday-Friday calendar week**, the same window the weekly recurring report covers. If the connected tools had no real activity in that window, the wizard shows an *"insufficient activity"* screen and **does not** save a half-onboarded client. The report agent never pads a thin week.
+
+In practice this bites in two cases:
+
+- **Onboarding a brand-new client whose tools have only this-week activity.** The previous Mon-Fri is empty, so the magic moment is insufficient. Wait until the next Monday to onboard, or pick a moment when the previous week had real work.
+- **Onboarding mid-week against a client whose prior week was genuinely quiet** (a holiday, a launch retrospective, time off). Same outcome.
+
+Recovery options when you hit insufficient:
+
+- **Retry next week.** Close the wizard. Onboard the client again once a meaningful Monday-Friday has passed.
+- **Onboard a more active client first.** The first-draft path requires drafted activity for the wizard to persist.
+
+The recurring report path doesn't have this constraint, once a client is on the roster, every week's cadence slot fires its own attempt; insufficient weeks land on the dashboard as honestly-labeled insufficient reports (not lost).
 
 ---
 
