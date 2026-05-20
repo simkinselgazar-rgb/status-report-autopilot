@@ -8,11 +8,11 @@ status: active
 # CLAUDE.md. Status Report Autopilot
 
 ## Project Overview
-**Being repositioned (decided 2026-05-19) from a closed paid SaaS to an open-source, self-hostable build-in-public release**, see Current State + [[Business Function AI Templates/ROADMAP|ROADMAP]]. A weekly-cadence approval queue for agency PMs and project teams: reads project-tool data, meeting transcripts, and team comms; generates per-client client-facing narratives; the PM scans, lightly tweaks, and ships via branded email + PDF + shareable link. Built on patterns mirroring [[Business Function AI Templates/workflow-engine|workflow-engine (P0 #4)]].
+**Open-sourced 2026-05-19. Public at https://github.com/simkinselgazar-rgb/status-report-autopilot (Apache 2.0, v0.1.0).** A weekly-cadence approval queue for agency PMs and project teams: reads project-tool data, meeting transcripts, and team comms; drafts a per-client client-facing narrative in the agency's voice; the PM scans, lightly tweaks, and ships it three ways (an email, a downloadable PDF, a public read-only link). Built on patterns mirroring [[Business Function AI Templates/workflow-engine|workflow-engine (P0 #4)]].
 
 **Authoritative spec:** [[Business Function AI Templates/Status Report Autopilot - Design Brief|Design Brief]], every UX/build decision flows from there.
 
-**License:** Being relicensed **Apache 2.0** as part of the open-source repositioning. Until that lands the repo is still proprietary-configured, no `LICENSE` file, `package.json` is `"private": true`, so do not publish yet.
+**License:** Apache 2.0. Released 2026-05-19 by the Simkins & Elgazar AI Practice. The branded setup PDF is attached to the GitHub release.
 
 ## Tech Stack
 - **Framework:** Next.js 16 (App Router)
@@ -237,7 +237,22 @@ The closed-product build documented above is feature-complete and frozen as the 
 - **3b. Zoom on Server-to-Server auth** (commit `6f14c62`). Zoom drops OAuth for a pasted credential triple (account id / client id / client secret); the connector mints its own tokens. `SourceConnection` is now a divergent union; the **refresh machinery is fully removed** (`ensureFreshConnection`, `oauth-popup.ts`, etc.). The connect UI is a generic multi-field credential form, **no OAuth flow remains anywhere**.
 - Connectors no longer use any `*_CLIENT_ID/SECRET` env vars, every credential is pasted in the wizard.
 
-**Next:** continue the repositioning, build order: 3a ✓ → 3b ✓ → **3c Microsoft Teams connector** (next) → BYO model config → park billing + simplify auth → Docker Compose packaging + in-app scheduler → first-run setup UI + branded guide → Apache-2.0 license + public repo → local end-to-end test. See [[Business Function AI Templates/ROADMAP|ROADMAP]] and the task list. v1.1 connectors (ClickUp, Jira, HubSpot, Loom, Google Meet) remain a later enhancement.
+**Repositioning shipped (2026-05-19):**
+- 3c. **Microsoft Teams connector** (commit `e288f01`). Promoted from v1.1 into v1; app-only Entra credentials, message ingestion via Graph, `teamId|channelId` composite stored as `projectId`.
+- 18a. **Model-agnostic BYO layer** (commit `a190698`). Provider catalog, settings table, resolver; the narrative agent's model is now a runtime function reading the stored config.
+- 18b. **Model picker UI** (commit `88b0617`). `/settings` page with the five-provider picker; key never reaches the browser.
+- 19a. **Billing parked** (commit `a121159`). Full pre-removal state on the `billing-parked` branch for a future hosted offering.
+- 19b. **Single-deployment auth** (commit `062101f`). Email + password (Better Auth `emailAndPassword`); the org plugin and social sign-in removed; queries un-scoped from `agencyId`; migration `0009` drops the subscription / organization / member / invitation tables.
+- Refactor pass (commit `f7d1e48`). Shared `connectors/http-core.ts` (`fetchWithRetry`, `assertWindow`, `inWindow`), a `connectors/registry.ts` + dynamic `[source]` route collapsing the ten static connector routes, dead code removed.
+- 20. **Packaging** (commit `7abe41f`). In-app hourly scheduler via `instrumentation.ts`; Dockerfile + `docker-compose.yml` + entrypoint. `docker compose up --build` is the whole install.
+- 21. **First-run /setup gate** (commit `051fb04`). A signed-in user with no model lands on `/setup` before the dashboard.
+- 22. **SETUP.md + branded PDF** (commit `1f75869`). Full self-hoster guide; PDF rendered through the [[AI Enablement Document Kit]] and committed to `docs/`.
+- 23. **Apache-2.0 license + public release** (commits `ce35d97`, `1f5895a`, `4e7f498`, `b07bf07`, `9c43c75`). LICENSE, README, scrubbed `.env.example`, Dockerfile build-time env placeholders, dead `engine.ts` removed. Em-dash sweep across the codebase (452 removed; an explicit anti-em-dash rule added to the narrative agent's prompt so generated reports stay clean).
+- **v0.1.0 released:** https://github.com/simkinselgazar-rgb/status-report-autopilot. Tagged, branded setup PDF attached to the release. The pre-repositioning private repo was renamed to `status-report-autopilot-archive`.
+
+Local Docker e2e smoke-tested end-to-end: `docker compose up --build` brings the stack up in ~46s on a clean checkout, sign-up redirects to `/setup`, model save advances to the dashboard, and the empty state ("All caught up", "Set up your first client") renders correctly.
+
+**Backlog:** #24 multi-select connector targets (let a client track multiple Asana projects / Slack channels / Zoom hosts per source). Touches `SourceConnection` (jsonb shape), the connect-step picker, and each connector's `fetchActivity` loop. Fast-follow, roughly one day.
 
 ## Design System
 - Tokens live in `src/app/globals.css` (`@theme`): warm light palette, `paper`, `surface`, `sunk`, `ink`/`ink-soft`/`ink-faint`, `line`, `pine` (connected/done), `ochre`/`focus`.
